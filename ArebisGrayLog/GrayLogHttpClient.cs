@@ -19,7 +19,7 @@ namespace Arebis.Logging.GrayLog
         /// Creates a new GrayLogHttpClient using the "GrayLogFacility", "GrayLogHost" and optionally "GrayLogHttpPort" and "GrayLogHttpSecure" (true or false) AppSettings.
         /// </summary>
         public GrayLogHttpClient()
-            : this(ConfigurationManager.AppSettings["GrayLogFacility"], ConfigurationManager.AppSettings["GrayLogHost"], Int32.Parse(ConfigurationManager.AppSettings["GrayLogHttpPort"] ?? "12201"), Boolean.Parse(ConfigurationManager.AppSettings["GrayLogHttpSecure"] ?? "false"))
+            : this(GraylogSettings.Default.GrayLogFacility, GraylogSettings.Default.GrayLogHost, GraylogSettings.Default.GrayLogHttpPort, GraylogSettings.Default.GrayLogHttpSecure)
         { }
 
         /// <summary>
@@ -66,8 +66,11 @@ namespace Arebis.Logging.GrayLog
             req.ContentLength = messageBody.Length;
             req.Expect = "";
 
-            if (!string.IsNullOrWhiteSpace(ConfigurationManager.AppSettings["GrayLogHttpReadWriteTimeout"])) req.ReadWriteTimeout = int.Parse(ConfigurationManager.AppSettings["GrayLogHttpReadWriteTimeout"]);
-            if (!string.IsNullOrWhiteSpace(ConfigurationManager.AppSettings["GrayLogHttpTimeout"])) req.Timeout = int.Parse(ConfigurationManager.AppSettings["GrayLogHttpTimeout"]);
+            if (GraylogSettings.Default.GrayLogHttpReadWriteTimeout != 0) 
+                req.ReadWriteTimeout = GraylogSettings.Default.GrayLogHttpReadWriteTimeout;
+            if (GraylogSettings.Default.GrayLogHttpTimeout != 0) 
+                req.Timeout = GraylogSettings.Default.GrayLogHttpTimeout;
+
             if (compressed) req.Headers.Add(HttpRequestHeader.ContentEncoding, "gzip");
             using (var reqs = req.GetRequestStream())
             {
