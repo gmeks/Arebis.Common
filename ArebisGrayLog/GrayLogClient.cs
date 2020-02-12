@@ -44,9 +44,19 @@ namespace Arebis.Logging.GrayLog
         /// <param name="ex">An exception to log data of.</param>
         public void Send(string shortMessage, string fullMessage = null, object data = null, Exception ex = null)
         {
-            // Verify facility is set:
-            if (String.IsNullOrEmpty(this.Facility)) return;
+            Send(shortMessage, DateTime.UtcNow, SyslogLevel.Informational, fullMessage, null,null,data, ex);
+        }
 
+        /// <summary>
+        /// Sents a message to GrayLog.
+        /// </summary>
+        /// <param name="shortMessage">Short message text (required).</param>
+        /// <param name="created">When this log line is from (required).</param>
+        /// <param name="fullMessage">Full message text.</param>
+        /// <param name="data">Additional details object. Can be a plain object, a string, an enumerable or a dictionary.</param>
+        /// <param name="ex">An exception to log data of.</param>
+        public void Send(string shortMessage, DateTime created, SyslogLevel level = SyslogLevel.Informational, string fullMessage = null,string customerName = null,string logType = null, object data = null, Exception ex = null)
+        {
             // Construct log record:
             var logRecord = new Dictionary<string, object>();
             logRecord["version"] = "1.1";
@@ -54,11 +64,20 @@ namespace Arebis.Logging.GrayLog
             logRecord["_facility"] = this.Facility;
             logRecord["short_message"] = shortMessage;
             if (!String.IsNullOrWhiteSpace(fullMessage)) logRecord["full_message"] = fullMessage;
-            logRecord["timestamp"] = EpochOf(DateTime.UtcNow);
+            logRecord["timestamp"] = EpochOf(created);
             if (data is string) logRecord["_data"] = data;
             else if (data is System.Collections.IDictionary) MergeDictionary(logRecord, (System.Collections.IDictionary)data, "_");
             else if (data is System.Collections.IEnumerable) logRecord["_values"] = data;
             else if (data != null) MergeObject(logRecord, data, "_");
+
+            if (!logRecord.ContainsKey("Severity"))
+                logRecord.Add("Severity", level.ToString());
+
+            if (!logRecord.ContainsKey("CustomerName") && !string.IsNullOrEmpty(customerName))
+                logRecord.Add("CustomerName", customerName);
+
+            if (!logRecord.ContainsKey("LogType") && !string.IsNullOrEmpty(logType))
+                logRecord.Add("LogType", logType);
 
             // Log exception information:
             if (ex != null)
