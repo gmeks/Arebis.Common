@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.IO;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -9,6 +10,8 @@ namespace Arebis.Logging.GrayLog
         //GrayLogHttpPort = 12201
         //GrayLogUdpPort = 12201
         //GrayLogUdpMaxPacketSize ?  512
+
+        public static RecyclableMemoryStreamManager MemoryStreamManger = new RecyclableMemoryStreamManager();
 
         static GraylogSettings _default;
 

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.IO;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -44,7 +45,7 @@ namespace Arebis.Logging.GrayLog
         /// <param name="ex">An exception to log data of.</param>
         public void Send(string shortMessage, string fullMessage = null, object data = null, Exception ex = null)
         {
-            Send(shortMessage, DateTime.UtcNow, SyslogLevel.Informational, fullMessage, null,null,data, ex);
+            Send(shortMessage, DateTime.UtcNow, SyslogLevel.Informational, fullMessage, null, null, data, ex);
         }
 
         /// <summary>
@@ -55,16 +56,21 @@ namespace Arebis.Logging.GrayLog
         /// <param name="fullMessage">Full message text.</param>
         /// <param name="data">Additional details object. Can be a plain object, a string, an enumerable or a dictionary.</param>
         /// <param name="ex">An exception to log data of.</param>
-        public void Send(string shortMessage, DateTime created, SyslogLevel level = SyslogLevel.Informational, string fullMessage = null,string customerName = null,string logType = null, object data = null, Exception ex = null)
+        public void Send(string shortMessage, DateTime created, SyslogLevel level = SyslogLevel.Informational, string fullMessage = null, string customerName = null, string logType = null, object data = null, Exception ex = null)
         {
             // Construct log record:
-            var logRecord = new Dictionary<string, object>();
-            logRecord["version"] = "1.1";
-            logRecord["host"] = Environment.MachineName;
-            logRecord["_facility"] = this.Facility;
-            logRecord["short_message"] = shortMessage;
-            if (!String.IsNullOrWhiteSpace(fullMessage)) logRecord["full_message"] = fullMessage;
-            logRecord["timestamp"] = EpochOf(created);
+            var logRecord = new Dictionary<string, object>(14)
+            {
+                ["version"] = "1.1",
+                ["host"] = Environment.MachineName,
+                ["_facility"] = this.Facility,
+                ["short_message"] = shortMessage,
+                ["timestamp"] = EpochOf(created)
+            };
+
+            if (!String.IsNullOrWhiteSpace(fullMessage))
+                logRecord["full_message"] = fullMessage;            
+
             if (data is string) logRecord["_data"] = data;
             else if (data is System.Collections.IDictionary) MergeDictionary(logRecord, (System.Collections.IDictionary)data, "_");
             else if (data is System.Collections.IEnumerable) logRecord["_values"] = data;
@@ -96,11 +102,20 @@ namespace Arebis.Logging.GrayLog
             }
 
             // Serialize object:
-            string logRecordString = JsonConvert.SerializeObject(logRecord);
-            var logRecordBytes = Encoding.UTF8.GetBytes(logRecordString);
+            var logRecordsBytes = GetJsonBytes(logRecord);
+            this.InternallySendMessage(logRecordsBytes);
+            logRecordsBytes?.Dispose();
+        }
 
-            // Dispatch message:
-            this.InternallySendMessage(logRecordBytes);
+        RecyclableMemoryStream GetJsonBytes(Dictionary<string, object> logRecord)
+        {
+            string logRecordString = JsonConvert.SerializeObject(logRecord);
+            ReadOnlySpan<byte> logRecordBytes = Encoding.UTF8.GetBytes(logRecordString);
+
+            var memory = new RecyclableMemoryStream(GraylogSettings.MemoryStreamManger);
+            memory.Write(logRecordBytes);
+            memory.Position = 0;
+            return memory;
         }
 
         /// <summary>
@@ -118,7 +133,7 @@ namespace Arebis.Logging.GrayLog
         /// Protocol specific implementation of (compressing and) sending of a message.
         /// </summary>
         /// <param name="uncompressedMessageBody">The uncompressed UTF8 encoded JSON message.</param>
-        protected abstract void InternallySendMessage(byte[] uncompressedMessageBody);
+        protected abstract void InternallySendMessage(RecyclableMemoryStream messageBody);
 
         /// <summary>
         /// Disposes the client.
@@ -128,17 +143,18 @@ namespace Arebis.Logging.GrayLog
         /// <summary>
         /// Helper method to apply GZIP compression.
         /// </summary>
-        protected byte[] Compress(byte[] raw, CompressionLevel compressionLevel)
+        protected RecyclableMemoryStream Compress(RecyclableMemoryStream raw, CompressionLevel compressionLevel)
         {
-            using (MemoryStream memory = new MemoryStream())
+            raw.Position = 0;
+            var memory = new RecyclableMemoryStream(GraylogSettings.MemoryStreamManger);
+            using (GZipStream gzip = new GZipStream(memory, compressionLevel, true))
             {
-                using (GZipStream gzip = new GZipStream(memory, compressionLevel, true))
-                {
-                    gzip.Write(raw, 0, raw.Length);
-                }
-                return memory.ToArray();
+                raw.CopyTo(gzip);
             }
-        }
+
+            memory.Position =0;
+            return memory;
+        } 
 
         private void MergeDictionary(Dictionary<string, object> target, System.Collections.IDictionary source, string prefix)
         {

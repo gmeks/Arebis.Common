@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.IO;
+using System;
 using System.Configuration;
 using System.Diagnostics;
 using System.IO;
@@ -59,46 +60,50 @@ namespace Arebis.Logging.GrayLog
         /// </summary>
         public int MaxPacketSize { get; set; }
 
-        protected override void InternallySendMessage(byte[] messageBody)
+        protected override void InternallySendMessage(RecyclableMemoryStream messageBody)
         {
+            RecyclableMemoryStream objectStream;
             // Get message id:
             NextChunckedMessageId++;
 
             // Apply compression:
             if (this.CompressionTreshold != -1 && messageBody.Length > this.CompressionTreshold)
-                messageBody = this.Compress(messageBody, CompressionLevel.Optimal);
-
-            using (var objectStream = new MemoryStream(messageBody))
             {
-                // Calculate needed chunk count:
-                var chunkCount = PartsNeeded(messageBody.Length, MaxPacketSize - 12);
-                if (chunkCount > 128) 
-                {
-                    Debug.WriteLine(String.Format("Error: Maximum number of GrayLog GELF UDP chuncks exceeded; {0} chuncks while maximum is {1}", chunkCount, 128));
-                    throw new GrayLoggingException("Maximum number of GrayLog GELF UDP chuncks exceeded.");
-                }
-
-                // For each chunk:
-                for (byte chunkNumber = 0; chunkNumber < chunkCount; chunkNumber++)
-                {
-                    // Create packet buffer:
-                    var chunkBuffer = new byte[MaxPacketSize];
-
-                    // Write GELF header (http://docs.graylog.org/en/latest/pages/gelf.html):
-                    chunkBuffer[0x00] = (byte)0x1e;
-                    chunkBuffer[0x01] = (byte)0x0f;
-                    BitConverter.GetBytes(NextChunckedMessageId).CopyTo(chunkBuffer, 0x02);
-                    chunkBuffer[0x0a] = chunkNumber;
-                    chunkBuffer[0x0b] = (byte)chunkCount;
-
-                    // Write body:
-                    var chunkSize = 12 + objectStream.Read(chunkBuffer, 12, MaxPacketSize - 12);
-
-                    // Send UDP packet:
-                    //Debug.WriteLine(String.Format("GrayLogUdpClient - Writing chunk {0} ({1}/{2}) {3:#,##0} bytes : ", NextChunckedMessageId, chunkNumber + 1, chunkCount, chunkSize) + String.Format("[{0:X2}-{1:X2}, {2:X2}-{3:X2}-{4:X2}-{5:X2}-{6:X2}-{7:X2}-{8:X2}-{9:X2}, {10:X2}, {11:X2}, [{12:X2},{13:X2},{14:X2},{15:X2},...]]", chunkBuffer[0], chunkBuffer[1], chunkBuffer[2], chunkBuffer[3], chunkBuffer[4], chunkBuffer[5], chunkBuffer[6], chunkBuffer[7], chunkBuffer[8], chunkBuffer[9], chunkBuffer[10], chunkBuffer[11], chunkBuffer[12], chunkBuffer[13], chunkBuffer[14], chunkBuffer[15]));
-                    this.UdpClient.Send(chunkBuffer, chunkSize);
-                }
+                objectStream = this.Compress(messageBody, CompressionLevel.Optimal);
             }
+            else
+                objectStream = messageBody;
+
+            // Calculate needed chunk count:
+            var chunkCount = PartsNeeded(messageBody.Length, MaxPacketSize - 12);
+            if (chunkCount > 128)
+            {
+                Debug.WriteLine(String.Format("Error: Maximum number of GrayLog GELF UDP chuncks exceeded; {0} chuncks while maximum is {1}", chunkCount, 128));
+                throw new GrayLoggingException("Maximum number of GrayLog GELF UDP chuncks exceeded.");
+            }
+
+            // For each chunk:
+            for (byte chunkNumber = 0; chunkNumber < chunkCount; chunkNumber++)
+            {
+                // Create packet buffer:
+                var chunkBuffer = new byte[MaxPacketSize];
+
+                // Write GELF header (http://docs.graylog.org/en/latest/pages/gelf.html):
+                chunkBuffer[0x00] = (byte)0x1e;
+                chunkBuffer[0x01] = (byte)0x0f;
+                BitConverter.GetBytes(NextChunckedMessageId).CopyTo(chunkBuffer, 0x02);
+                chunkBuffer[0x0a] = chunkNumber;
+                chunkBuffer[0x0b] = (byte)chunkCount;
+
+                // Write body:
+                var chunkSize = 12 + objectStream.Read(chunkBuffer, 12, MaxPacketSize - 12);
+
+                // Send UDP packet:
+                //Debug.WriteLine(String.Format("GrayLogUdpClient - Writing chunk {0} ({1}/{2}) {3:#,##0} bytes : ", NextChunckedMessageId, chunkNumber + 1, chunkCount, chunkSize) + String.Format("[{0:X2}-{1:X2}, {2:X2}-{3:X2}-{4:X2}-{5:X2}-{6:X2}-{7:X2}-{8:X2}-{9:X2}, {10:X2}, {11:X2}, [{12:X2},{13:X2},{14:X2},{15:X2},...]]", chunkBuffer[0], chunkBuffer[1], chunkBuffer[2], chunkBuffer[3], chunkBuffer[4], chunkBuffer[5], chunkBuffer[6], chunkBuffer[7], chunkBuffer[8], chunkBuffer[9], chunkBuffer[10], chunkBuffer[11], chunkBuffer[12], chunkBuffer[13], chunkBuffer[14], chunkBuffer[15]));
+                this.UdpClient.Send(chunkBuffer, chunkSize);
+            }
+
+            objectStream?.Dispose();
         }
 
         /// <summary>
@@ -115,9 +120,9 @@ namespace Arebis.Logging.GrayLog
         /// <param name="totalSize"></param>
         /// <param name="partSize"></param>
         /// <returns></returns>
-        private static int PartsNeeded(int totalSize, int partSize)
+        private static int PartsNeeded(long totalSize, int partSize)
         {
-            return (totalSize + partSize - 1) / partSize;
+            return (int)(totalSize + partSize - 1) / partSize;
         }
     }
 }
