@@ -7,6 +7,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Arebis.Logging.GrayLog
 {
@@ -43,9 +44,9 @@ namespace Arebis.Logging.GrayLog
         /// <param name="fullMessage">Full message text.</param>
         /// <param name="data">Additional details object. Can be a plain object, a string, an enumerable or a dictionary.</param>
         /// <param name="ex">An exception to log data of.</param>
-        public void Send(string shortMessage, string fullMessage = null, object data = null, Exception ex = null)
+        public async Task SendAsync(string shortMessage, string fullMessage = null, object data = null, Exception ex = null)
         {
-            Send(shortMessage, DateTime.UtcNow, SyslogLevel.Informational, fullMessage, null, null, data, ex);
+            await SendAsync(shortMessage, DateTime.UtcNow, SyslogLevel.Informational, fullMessage, null, null, data, ex);
         }
 
         /// <summary>
@@ -56,7 +57,7 @@ namespace Arebis.Logging.GrayLog
         /// <param name="fullMessage">Full message text.</param>
         /// <param name="data">Additional details object. Can be a plain object, a string, an enumerable or a dictionary.</param>
         /// <param name="ex">An exception to log data of.</param>
-        public void Send(string shortMessage, DateTime created, SyslogLevel level = SyslogLevel.Informational, string fullMessage = null, string customerName = null, string logType = null, object data = null, Exception ex = null)
+        public async Task SendAsync(string shortMessage, DateTime created, SyslogLevel level = SyslogLevel.Informational, string fullMessage = null, string customerName = null, string logType = null, object data = null, Exception ex = null)
         {
             // Construct log record:
             var logRecord = new Dictionary<string, object>(14)
@@ -103,7 +104,7 @@ namespace Arebis.Logging.GrayLog
 
             // Serialize object:
             var logRecordsBytes = GetJsonBytes(logRecord);
-            this.InternallySendMessage(logRecordsBytes);
+            await this.InternallySendMessageAsync(logRecordsBytes);
             logRecordsBytes?.Dispose();
         }
 
@@ -123,17 +124,17 @@ namespace Arebis.Logging.GrayLog
         /// </summary>
         /// <param name="ex">The exception to log.</param>
         /// <param name="level">The level to log the exception at.</param>
-        public void Send(Exception ex, SyslogLevel level = SyslogLevel.Error)
+        public async Task SendAsync(Exception ex, SyslogLevel level = SyslogLevel.Error)
         {
             // Send exception:
-            if (ex != null) this.Send(ex.Message, null, new { level = level }, ex);
+            if (ex != null) await SendAsync(ex.Message, null, new { level = level }, ex);
         }
 
         /// <summary>
         /// Protocol specific implementation of (compressing and) sending of a message.
         /// </summary>
         /// <param name="uncompressedMessageBody">The uncompressed UTF8 encoded JSON message.</param>
-        protected abstract void InternallySendMessage(RecyclableMemoryStream messageBody);
+        protected abstract Task InternallySendMessageAsync(RecyclableMemoryStream messageBody);
 
         /// <summary>
         /// Disposes the client.
@@ -176,6 +177,6 @@ namespace Arebis.Logging.GrayLog
         {
             TimeSpan t = dt.ToUniversalTime() - new DateTime(1970, 1, 1);
             return (long)t.TotalSeconds;
-        }
+        }     
     }
 }

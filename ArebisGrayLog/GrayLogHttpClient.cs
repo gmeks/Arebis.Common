@@ -54,7 +54,7 @@ namespace Arebis.Logging.GrayLog
         /// </summary>
         public Uri Uri { get; private set; }
 
-        protected override void InternallySendMessage(RecyclableMemoryStream messageBody)
+        protected override async Task InternallySendMessageAsync(RecyclableMemoryStream messageBody)
         {
             if(gHttpClient == null)
             {
@@ -72,17 +72,19 @@ namespace Arebis.Logging.GrayLog
 
 
             HttpContent httpContent = new StreamContent(messageBody);
+            HttpResponseMessage response;
             if (this.CompressionTreshold != -1 && messageBody.Length > this.CompressionTreshold)
             {
                 var compressedContent = new ArebisGrayLog.CompressedContent(httpContent, "gzip");
-                var response = gHttpClient.PostAsync(this.Uri, compressedContent);
-                response.Wait();
+                response = await gHttpClient.PostAsync(this.Uri, compressedContent);                
             }
             else
             {
-                var response = gHttpClient.PostAsync(this.Uri, httpContent);
-                response.Wait();
-            }            
+                response = await gHttpClient.PostAsync(this.Uri, httpContent);
+            }
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception("Failed to transmit log with error " + response.ReasonPhrase);
         }
 
         public override void Dispose()
