@@ -36,6 +36,7 @@ namespace Arebis.Logging.GrayLog
             }
         }
 
+        public int GrayLogMaximumCompressedSize { get; set; }
 
         public int GrayLogUdpMaxPacketSize { get; set; }
 

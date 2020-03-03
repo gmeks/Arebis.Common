@@ -70,21 +70,26 @@ namespace Arebis.Logging.GrayLog
                 gHttpClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
             }
 
-
-            HttpContent httpContent = new StreamContent(messageBody);
-            HttpResponseMessage response;
-            if (this.CompressionTreshold != -1 && messageBody.Length > this.CompressionTreshold)
+                        
+            using (HttpContent httpContent = new StreamContent(messageBody))
             {
-                var compressedContent = new ArebisGrayLog.CompressedContent(httpContent, "gzip");
-                response = await gHttpClient.PostAsync(this.Uri, compressedContent);                
-            }
-            else
-            {
-                response = await gHttpClient.PostAsync(this.Uri, httpContent);
-            }
+                HttpResponseMessage response;
+                if (this.CompressionTreshold != -1 && messageBody.Length > this.CompressionTreshold)
+                {
+                    var compressedContent = new ArebisGrayLog.CompressedContent(httpContent, "gzip");
+                    response = await gHttpClient.PostAsync(this.Uri, compressedContent);
+                }
+                else
+                {
+                    response = await gHttpClient.PostAsync(this.Uri, httpContent);
+                }
 
-            if (!response.IsSuccessStatusCode)
-                throw new Exception("Failed to transmit log with error " + response.ReasonPhrase);
+
+                if (!response.IsSuccessStatusCode)
+                    throw new Exception("Failed to transmit log with error " + response.ReasonPhrase);
+
+                response?.Dispose();
+            }            
         }
 
         public override void Dispose()

@@ -80,8 +80,14 @@ namespace Arebis.Logging.GrayLog
             if (!logRecord.ContainsKey("Severity"))
                 logRecord.Add("Severity", level.ToString());
 
+            if (!logRecord.ContainsKey("Severity-int"))
+                logRecord.Add("Severity-int", ConvertLevelToSaneInt(level));
+
             if (!logRecord.ContainsKey("CustomerName") && !string.IsNullOrEmpty(customerName))
                 logRecord.Add("CustomerName", customerName);
+
+            if(logRecord.ContainsKey("CustomerName") && !logRecord.ContainsKey("CustomerNameHash"))
+                logRecord.Add("CustomerNameHash", logRecord["CustomerName"].GetHashCode());
 
             if (!logRecord.ContainsKey("LogType") && !string.IsNullOrEmpty(logType))
                 logRecord.Add("LogType", logType);
@@ -106,6 +112,38 @@ namespace Arebis.Logging.GrayLog
             var logRecordsBytes = GetJsonBytes(logRecord);
             await this.InternallySendMessageAsync(logRecordsBytes);
             logRecordsBytes?.Dispose();
+        }
+
+        static int ConvertLevelToSaneInt(SyslogLevel level)
+        {
+            switch(level)
+            {
+                case SyslogLevel.Emergency:
+                    return 7;
+
+                case SyslogLevel.Alert:
+                    return 6;
+
+                case SyslogLevel.Critical:
+                    return 5;
+
+                case SyslogLevel.Error:
+                    return 4;
+
+                case SyslogLevel.Warning:
+                    return 3;
+
+                case SyslogLevel.Notice:
+                    return 2;
+
+                case SyslogLevel.Informational:
+                    return 1;
+
+                case SyslogLevel.Debug:
+                    return 0;
+            }
+
+            return 1;
         }
 
         RecyclableMemoryStream GetJsonBytes(Dictionary<string, object> logRecord)
